@@ -9,7 +9,18 @@ namespace Blackjack
 {
     class Program
     {
-        const int BlackJackThreshold = 21;
+        const int BlackjackThreshold = 21;
+
+        const string Jack = "j";
+        const string Queen = "q";
+        const string King = "k";
+
+        const string Heart = "h";
+        const string Diamond = "d";
+        const string Spade = "s";
+        const string Club = "c";
+
+
         static void Main(string[] args)
         {
             ComputeDeal();
@@ -23,9 +34,15 @@ namespace Blackjack
             if (!playersWithCards.Any() || !dealerCards.Any())
                 return;
 
-            var outcomes = GetAllPlayerOutcomes(playersWithCards, dealerCards.ToList());
+            bool houseWins = false;
+            var outcomes = GetAllPlayerOutcomes(playersWithCards, dealerCards.ToList(), out houseWins);
             outcomes.ForEach(x => Console.WriteLine(x));
-            Console.ReadKey();
+            if (houseWins)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("HOUSE WINS!!!");
+            }
+            Console.ReadLine();
 
         }
 
@@ -77,11 +94,13 @@ namespace Blackjack
 
         }
 
-        private static List<string> GetAllPlayerOutcomes(Dictionary<int, List<Card>> playerCards, List<Card> dealerCards)
+        private static List<string> GetAllPlayerOutcomes(Dictionary<int, List<Card>> players, List<Card> dealerCards, out bool houseWins)
         {
             List<string> results = new List<string>();
+            bool oneOrMorePlayerWon = false;
+    
 
-            foreach (var player in playerCards)
+            foreach (var player in players)
             {
                 var cards = player.Value;
                 if (cards.Count == 5)
@@ -90,14 +109,21 @@ namespace Blackjack
                     var playerWins = GetFiveCardsResult(cards);
                     if (playerWins)
                     {
+                        oneOrMorePlayerWon = oneOrMorePlayerWon |= playerWins;
                         results.Add(FormatResult(player.Key, PlayerOutcome.Win));
                         continue;
                     }
                 }
 
                 var playerOutcome = GetPlayerOutcome(cards, dealerCards);
+
+                oneOrMorePlayerWon = oneOrMorePlayerWon |= (playerOutcome == PlayerOutcome.Win);
+
                 results.Add(FormatResult(player.Key, playerOutcome));
             }
+
+            houseWins = !oneOrMorePlayerWon;
+
             return results;
         }
 
@@ -125,7 +151,7 @@ namespace Blackjack
 
 
             var playerSum = playerCards.Sum(x => x.Value);
-            if (playerSum <= BlackJackThreshold && playerSum > dealerSum)
+            if (playerSum <= BlackjackThreshold && playerSum > dealerSum)
             {
                 return PlayerOutcome.Win;
             }
@@ -161,12 +187,12 @@ namespace Blackjack
         {
             var sum = cards.Sum(x => x.Value);
 
-            if (sum <= BlackJackThreshold)
+            if (sum <= BlackjackThreshold)
             {
                 //Wins
                 return true;
             }
-            else if (sum > BlackJackThreshold && cards.Any(x => x.HasAceOfSpade && !x.AceUsed))
+            else if (sum > BlackjackThreshold && cards.Any(x => x.HasAceOfSpade && !x.AceUsed))
             {
                 var aceCard = cards.SingleOrDefault(x => x.HasAceOfSpade);
                 var aceIndex = cards.IndexOf(aceCard);
@@ -196,24 +222,26 @@ namespace Blackjack
                 var index = i + 1;
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine($"What is the type of Card {index}?");
-
-                if (IsValidCardType(Console.ReadLine()))
+                var cardType = Console.ReadLine();
+                if (IsValidCardType(cardType))
                 {
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine($"Enter value on card {index}. Between 1 and 10, (J)ack, (Q)ueen, (K)ing");
-                    var card = ValidateCard(Console.ReadLine());
+                    var card = ValidateCard(Console.ReadLine(), cardType);
 
                     Console.ForegroundColor = ConsoleColor.Red;
+
+                    if (card == null) //Retry
+                    {
+                        i--;
+                        Console.WriteLine("Wrong entry, try again!");
+                    }
+
                     if (card.HasAceOfSpade && cards.Any(x => x.HasAceOfSpade))
                     {
                         i--;
                         Console.WriteLine("Deck cannot have more than one ace of spade, try again!");
                         continue;
-                    }
-                    if (card == null) //Retry
-                    {
-                        i--;
-                        Console.WriteLine("Wrong entry, try again!");
                     }
 
                     else
@@ -232,17 +260,17 @@ namespace Blackjack
 
         private static bool IsValidCardType(string val)
         {
-            List<string> types = new List<string> { "s", "h", "d", "c" };
+            List<string> types = new List<string> { Club, Heart, Diamond, Spade };
 
             if (val.Length > 1) return false;
             return types.Contains(val.ToLower());
         }
 
-        private static Card ValidateCard(string val)
+        private static Card ValidateCard(string val, string cardType)
         {
             Card card = null;
             const int defaultAceValue = 11;
-            List<string> specialCards = new List<string> { "j", "q", "k" };
+            List<string> specialCards = new List<string> { Jack, Queen, King };
 
             if (specialCards.Contains(val.ToLower().FirstOrDefault().ToString()))
             {
@@ -251,11 +279,11 @@ namespace Blackjack
             else
             {
                 int.TryParse(val, out var value);
-                if (value == 1)
+                if (value == 1 && cardType.ToLower().StartsWith(Spade))
                 {
                     card = new Card() { Value = defaultAceValue, HasAceOfSpade = true };
                 }
-                else if (value >= 2 && value <= 10)
+                else if (value >= 1 && value <= 10)
                 {
                     card = new Card() { Value = value };
                 }
@@ -272,9 +300,11 @@ namespace Blackjack
         //{
 
         //}
+
         public int Value { get; set; }
         public bool HasAceOfSpade { get; set; }
         public bool AceUsed { get; set; }
+
         //public override string ToString()
         //{
         //    return base.ToString();
