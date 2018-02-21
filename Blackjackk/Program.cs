@@ -11,32 +11,22 @@ namespace Blackjack
     {
         const int BlackjackThreshold = 21;
 
-        const string Jack = "j";
-        const string Queen = "q";
-        const string King = "k";
-
-        const string Heart = "h";
-        const string Diamond = "d";
-        const string Spade = "s";
-        const string Club = "c";
-
-
         static void Main(string[] args)
         {
-            ComputeDeal();
+            ComputeHands();
         }
 
-        private static void ComputeDeal()
+        private static void ComputeHands()
         {
-            var playersWithCards = GetPlayerCards();
-            var dealerCards = GetDealerCards();
+            var players = GetPlayers();
+            var dealer = GetDealer();
 
-            if (!playersWithCards.Any() || !dealerCards.Any())
+            if (dealer == null || !players.Any())
                 return;
 
-            bool houseWins = false;
-            var outcomes = GetAllPlayerOutcomes(playersWithCards, dealerCards.ToList(), out houseWins);
-            outcomes.ForEach(x => Console.WriteLine(x));
+            bool houseWins;
+            var outcomes = GetAllPlayerOutcomes(players, dealer, out houseWins);
+            outcomes.ForEach(Console.WriteLine);
             if (houseWins)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
@@ -46,21 +36,98 @@ namespace Blackjack
 
         }
 
-        private static Dictionary<int, List<Card>> GetPlayerCards()
+        private static List<string> GetAllPlayerOutcomes(List<IPlayer> players, IPlayer dealr, out bool houseWins)
         {
-            Dictionary<int, List<Card>> playerWithCards = new Dictionary<int, List<Card>>();
+            List<string> results = new List<string>();
+            bool oneOrMorePlayerWon = false;
 
+            var dealer = ((Dealer)dealr);
+
+            foreach (var p in players)
+            {
+                var player = (Player)p;
+                if (player.CardCount == 5)
+                {
+                    //Check if player with 5 cards won
+                    var playerWins = GetFiveCardsResult(player);
+                    if (playerWins)
+                    {
+                        oneOrMorePlayerWon = true;
+                        results.Add(FormatResult(player.Name, PlayerOutcome.Win));
+                        continue;
+                    }
+                }
+
+                var playerOutcome = GetPlayerOutcome(player, dealer);
+
+                if (!oneOrMorePlayerWon && playerOutcome == PlayerOutcome.Win)
+                    oneOrMorePlayerWon = true;
+
+                results.Add(FormatResult(player.Name, playerOutcome));
+            }
+
+            houseWins = !oneOrMorePlayerWon;
+
+            return results;
+        }
+        private static string FormatResult(string playerName, PlayerOutcome outcome)
+        {
+            return $"{playerName} {(outcome == PlayerOutcome.Win ? "beats the dealer" : "loses")}";
+
+        }
+        private static bool GetFiveCardsResult(Player player)
+        {
+            if (player.Sum <= BlackjackThreshold)
+            {
+                //Wins
+                return true;
+            }
+
+            if (!player.HasUnusedAceCard) return false;
+
+            //Recalculate player sum with an ace
+            var acedSum = player.AcedSum;
+            return acedSum <= BlackjackThreshold;
+        }
+        private static PlayerOutcome GetPlayerOutcome(Player player, Dealer dealer)
+        {
+            var dealerSum = dealer.Sum;
+            if (dealer.HasUnusedAceCard)
+            {
+                dealerSum = dealer.AcedSum;
+            }
+
+            var playerSum = player.Sum;
+            if (player.HasUnusedAceCard)
+            {
+                playerSum = player.AcedSum;
+            }
+
+            if (playerSum <= BlackjackThreshold && playerSum > dealerSum)
+            {
+                return PlayerOutcome.Win;
+            }
+
+            return PlayerOutcome.Lost;
+        }
+        private static List<IPlayer> GetPlayers()
+        {
+            List<IPlayer> players = new List<IPlayer>();
+            Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("Enter number of players");
-            if (int.TryParse(Console.ReadLine(), out int numberOfPlayers))
+            int numberOfPlayers;
+            if (int.TryParse(Console.ReadLine(), out numberOfPlayers))
             {
                 for (int i = 0; i < numberOfPlayers; i++)
                 {
                     var index = i + 1;
                     Console.WriteLine($"Player {index}: Enter number of cards");
-                    if (int.TryParse(Console.ReadLine(), out int cardCount))
+                    int cardCount;
+                    if (int.TryParse(Console.ReadLine(), out cardCount))
                     {
-                        var cards = GetCards(cardCount);
-                        playerWithCards.Add(index, cards);
+                        var playerId = index.ToString();
+                        var player = new Player(playerId, cardCount);
+                        players.Add(player);
                     }
                     else
                     {
@@ -74,150 +141,70 @@ namespace Blackjack
                 Console.WriteLine("Only accepts numbers");
             }
 
-            return playerWithCards;
+            return players;
         }
-
-        private static IEnumerable<Card> GetDealerCards()
+        private static IPlayer GetDealer()
         {
             //Enter Dealer card details
             Console.WriteLine($"Dealer: Enter number of cards");
-            if (int.TryParse(Console.ReadLine(), out int dealerCount))
+            int dealerCount;
+            if (int.TryParse(Console.ReadLine(), out dealerCount))
             {
-                return GetCards(dealerCount);
+                return new Dealer(dealerCount);
             }
-            else
-            {
-                Console.WriteLine($"Only accept numbers");
-                GetDealerCards();
-            }
-            return Enumerable.Empty<Card>();
 
+            Console.WriteLine($"Only accept numbers");
+            return GetDealer();
+        }
+    }
+
+
+
+    public interface IPlayer
+    {
+
+    }
+
+    public class Player : IPlayer
+    {
+        const string Jack = "j";
+        const string Queen = "q";
+        const string King = "k";
+
+        const string Heart = "h";
+        const string Diamond = "d";
+        const string Spade = "s";
+        const string Club = "c";
+        private string _playerId;
+
+
+        protected Player(int cardCount) : this("Dealer", cardCount)
+        { }
+
+        public Player(string playerId, int cardCount)
+        {
+            //if (cardCount == 0)
+            //    throw new ArgumentException();
+            _playerId = playerId.ToString();
+            CardCount = cardCount;
+            Cards = new List<Card>(cardCount);
+            GetCards();
         }
 
-        private static List<string> GetAllPlayerOutcomes(Dictionary<int, List<Card>> players, List<Card> dealerCards, out bool houseWins)
+        public string Name => $"Player {_playerId}";
+        public int CardCount { get; }
+        public int Sum => GetSum();
+        public int AcedSum => GetSum(acedSum: true);
+        public bool HasUnusedAceCard => Cards != null && Cards.Any(c => c.IsAceOfSpade && !c.AceUsed);
+
+        public List<Card> Cards { get; set; }
+
+        protected void GetCards()
         {
-            List<string> results = new List<string>();
-            bool oneOrMorePlayerWon = false;
-    
-
-            foreach (var player in players)
-            {
-                var cards = player.Value;
-                if (cards.Count == 5)
-                {
-                    //
-                    var playerWins = GetFiveCardsResult(cards);
-                    if (playerWins)
-                    {
-                        oneOrMorePlayerWon = oneOrMorePlayerWon |= playerWins;
-                        results.Add(FormatResult(player.Key, PlayerOutcome.Win));
-                        continue;
-                    }
-                }
-
-                var playerOutcome = GetPlayerOutcome(cards, dealerCards);
-
-                oneOrMorePlayerWon = oneOrMorePlayerWon |= (playerOutcome == PlayerOutcome.Win);
-
-                results.Add(FormatResult(player.Key, playerOutcome));
-            }
-
-            houseWins = !oneOrMorePlayerWon;
-
-            return results;
-        }
-
-        private static PlayerOutcome GetPlayerOutcome(List<Card> playerCards, List<Card> dealerCards)
-        {
-            var dealerSum = dealerCards.Sum(x => x.Value);
-            var dealerHasUnusedAce = dealerCards.Any(d => d.HasAceOfSpade && !d.AceUsed);
-
-            var acedDealerCards = new List<Card>();
-            if (dealerHasUnusedAce)
-            {
-                dealerCards.ForEach(d =>
-                {
-                    if (d.HasAceOfSpade)
-                    {
-                        d.Value = 1;
-                        d.AceUsed = true;
-                    }
-                    acedDealerCards.Add(d);
-                });
-
-                //Use ace for dealer
-                dealerSum = acedDealerCards.Sum(x => x.Value);
-            }
-
-
-            var playerSum = playerCards.Sum(x => x.Value);
-            if (playerSum <= BlackjackThreshold && playerSum > dealerSum)
-            {
-                return PlayerOutcome.Win;
-            }
-
-            if (playerCards.Any(a => a.HasAceOfSpade && !a.AceUsed))
-            {
-                var acedPlayerCards = new List<Card>();
-                var aceCard = playerCards.SingleOrDefault(x => x.HasAceOfSpade);
-                var aceIndex = playerCards.IndexOf(aceCard);
-                playerCards.ForEach(x =>
-                {
-                    if (x.HasAceOfSpade)
-                    {
-                        x.Value = 1;
-                        x.AceUsed = true;
-                    }
-                    acedPlayerCards.Add(x);
-                });
-
-                GetPlayerOutcome(acedPlayerCards, dealerHasUnusedAce ? acedDealerCards : dealerCards);
-            }
-
-            return PlayerOutcome.Lost;
-        }
-
-        private static string FormatResult(int playerId, PlayerOutcome outcome)
-        {
-            return $"Player {playerId} {(outcome == PlayerOutcome.Win ? "beats the dealer" : "loses")}";
-
-        }
-
-        private static bool GetFiveCardsResult(List<Card> cards)
-        {
-            var sum = cards.Sum(x => x.Value);
-
-            if (sum <= BlackjackThreshold)
-            {
-                //Wins
-                return true;
-            }
-            else if (sum > BlackjackThreshold && cards.Any(x => x.HasAceOfSpade && !x.AceUsed))
-            {
-                var aceCard = cards.SingleOrDefault(x => x.HasAceOfSpade);
-                var aceIndex = cards.IndexOf(aceCard);
-                //Change ace value to 1
-                aceCard.Value = 1;
-                aceCard.AceUsed = true;
-
-                if (aceIndex != -1)
-                    cards[aceIndex] = aceCard;
-
-                GetFiveCardsResult(cards);
-            }
-
-            return false;
-        }
-
-        private static List<Card> GetCards(int countOfCards)
-        {
-
-            List<Card> cards = new List<Card>();
-
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine($"Card Types - Spade (S), Heart (H), Diamond (D), Club (C)");
 
-            for (int i = 0; i < countOfCards; i++)
+            for (int i = 0; i < CardCount; i++)
             {
                 var index = i + 1;
                 Console.ForegroundColor = ConsoleColor.Green;
@@ -229,33 +216,59 @@ namespace Blackjack
                     Console.WriteLine($"Enter value on card {index}. Between 1 and 10, (J)ack, (Q)ueen, (K)ing");
                     var card = ValidateCard(Console.ReadLine(), cardType);
 
-                    Console.ForegroundColor = ConsoleColor.Red;
-
-                    if (card == null) //Retry
+                    //Invalid card - retry!
+                    if (card == null)
                     {
                         i--;
+                        Console.ForegroundColor = ConsoleColor.Red;
                         Console.WriteLine("Wrong entry, try again!");
-                    }
-
-                    if (card.HasAceOfSpade && cards.Any(x => x.HasAceOfSpade))
-                    {
-                        i--;
-                        Console.WriteLine("Deck cannot have more than one ace of spade, try again!");
                         continue;
                     }
 
+                    if (card.IsAceOfSpade && Cards.Any(x => x.IsAceOfSpade))
+                    {
+                        i--;
+                        Console.WriteLine("Deck cannot have more than one ace of spade, try again!");
+                    }
                     else
-                        cards.Add(card);
+                    {
+                        Cards.Add(card);
+                    }
                 }
                 else
                 {
-                    //Retry
+                    //Invalid card type - Retry!
                     i--;
                 }
 
             }
+        }
+        private void UseAceCard()
+        {
+            if (!HasUnusedAceCard) return;
 
-            return cards;
+            //Only update card stack if ace hasnt been used
+            var acedCards = new List<Card>();
+            Cards.ForEach(x =>
+            {
+                if (x.IsAceOfSpade)
+                {
+                    x.Value = 1;
+                    x.AceUsed = true;
+                }
+                acedCards.Add(x);
+            });
+            Cards = acedCards;
+
+        }
+        protected int GetSum(bool acedSum = false)
+        {
+            if (acedSum)
+            {
+                //Update stack with ace value
+                UseAceCard();
+            }
+            return Cards.Sum(x => x.Value);
         }
 
         private static bool IsValidCardType(string val)
@@ -265,24 +278,27 @@ namespace Blackjack
             if (val.Length > 1) return false;
             return types.Contains(val.ToLower());
         }
-
         private static Card ValidateCard(string val, string cardType)
         {
             Card card = null;
             const int defaultAceValue = 11;
             List<string> specialCards = new List<string> { Jack, Queen, King };
 
+            //Special cards - jack/queen/king
             if (specialCards.Contains(val.ToLower().FirstOrDefault().ToString()))
             {
                 card = new Card() { Value = 10 };
             }
             else
             {
-                int.TryParse(val, out var value);
+                int value;
+                int.TryParse(val, out value);
+                //Spade with ace
                 if (value == 1 && cardType.ToLower().StartsWith(Spade))
                 {
-                    card = new Card() { Value = defaultAceValue, HasAceOfSpade = true };
+                    card = new Card() { Value = defaultAceValue, IsAceOfSpade = true };
                 }
+                //Others
                 else if (value >= 1 && value <= 10)
                 {
                     card = new Card() { Value = value };
@@ -292,8 +308,15 @@ namespace Blackjack
             return card;
         }
     }
+    public sealed class Dealer : Player
+    {
+        public Dealer(int numberOfCards) : base(numberOfCards)
+        {
 
-    [DebuggerDisplay("Has Ace Of Spade - {HasAceOfSpade}, Value - {Value}")]
+        }
+    }
+
+    [DebuggerDisplay("Is Ace Of Spade - {IsAceOfSpade}, Value - {Value}")]
     public class Card
     {
         //public Card(string type, string specialValue)
@@ -302,7 +325,7 @@ namespace Blackjack
         //}
 
         public int Value { get; set; }
-        public bool HasAceOfSpade { get; set; }
+        public bool IsAceOfSpade { get; set; }
         public bool AceUsed { get; set; }
 
         //public override string ToString()
