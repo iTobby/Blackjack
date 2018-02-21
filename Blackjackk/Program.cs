@@ -24,8 +24,7 @@ namespace Blackjack
             if (dealer == null || !players.Any())
                 return;
 
-            bool houseWins;
-            var outcomes = GetAllPlayerOutcomes(players, dealer, out houseWins);
+            var outcomes = GetAllPlayerOutcomes(players, dealer, out bool houseWins);
             outcomes.ForEach(Console.WriteLine);
             if (houseWins)
             {
@@ -115,18 +114,17 @@ namespace Blackjack
             List<IPlayer> players = new List<IPlayer>();
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("Enter number of players");
-            int numberOfPlayers;
-            if (int.TryParse(Console.ReadLine(), out numberOfPlayers))
+            if (int.TryParse(Console.ReadLine(), out int numberOfPlayers))
             {
                 for (int i = 0; i < numberOfPlayers; i++)
                 {
                     var index = i + 1;
-                    Console.WriteLine($"Player {index}: Enter number of cards");
-                    int cardCount;
-                    if (int.TryParse(Console.ReadLine(), out cardCount))
+                    Console.WriteLine($"Enter name of player {index}");
+                    var playerName = Console.ReadLine();
+                    Console.WriteLine($"{playerName}: Enter number of cards");
+                    if (int.TryParse(Console.ReadLine(), out int cardCount))
                     {
-                        var playerId = index.ToString();
-                        var player = new Player(playerId, cardCount);
+                        var player = new Player(playerName, cardCount);
                         players.Add(player);
                     }
                     else
@@ -185,13 +183,13 @@ namespace Blackjack
         {
             //if (cardCount == 0)
             //    throw new ArgumentException();
-            _playerId = playerId.ToString();
+            _playerId = playerId;
             CardCount = cardCount;
             Cards = new List<Card>(cardCount);
             GetCards();
         }
 
-        public string Name => $"Player {_playerId}";
+        public string Name => _playerId;
         public int CardCount { get; }
         public int Sum => GetSum();
         public int AcedSum => GetSum(acedSum: true);
